@@ -6,6 +6,73 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: redis
+  namespace: borg-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - --maxmemory
+            - 2gb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          ports:
+            - containerPort: 6379
+              name: redis
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: borg-ui
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: borg-web-ui
   namespace: borg-ui
 spec:
@@ -18,12 +85,16 @@ spec:
       labels:
         app: borg-web-ui
     spec:
+      securityContext:
+        fsGroup: 65534
       containers:
         - name: borg-web-ui
           image: ainullcode/borg-ui:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
+            runAsUser: 65534
+            runAsGroup: 65534
           ports:
             - containerPort: 8081
               name: http
@@ -33,9 +104,9 @@ spec:
             - name: ENVIRONMENT
               value: "production"
             - name: PUID
-              value: "1001"
+              value: "65534"
             - name: PGID
-              value: "1001"
+              value: "65534"
             - name: TZ
               value: "Europe/Bucharest"
             - name: LOCAL_MOUNT_POINTS
