@@ -3,6 +3,19 @@ kind: Namespace
 metadata:
   name: borg-ui
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: borg-ui-data
+  namespace: borg-ui
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -108,7 +121,7 @@ spec:
             - name: TZ
               value: "Europe/Bucharest"
             - name: LOCAL_MOUNT_POINTS
-              value: "/local"
+              value: "/backups"
             - name: REDIS_HOST
               value: "redis"
             - name: REDIS_PORT
@@ -149,25 +162,22 @@ spec:
             - name: host-localtime
               mountPath: /etc/localtime
               readOnly: true
-            - name: host-root
-              mountPath: /local
+            - name: backup-host-path
+              mountPath: /backups
       volumes:
         - name: borg-data
-          hostPath:
-            path: /data-nfs/data/borg/app-data
-            type: DirectoryOrCreate
+          persistentVolumeClaim:
+            claimName: borg-ui-data
         - name: borg-cache
-          hostPath:
-            path: /data-nfs/data/borg/cache
-            type: DirectoryOrCreate
+          emptyDir: {}
         - name: host-localtime
           hostPath:
             path: /etc/localtime
             type: File
-        - name: host-root
+        - name: backup-host-path
           hostPath:
-            path: /
-            type: Directory
+            path: /data-nfs/data/borg
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
