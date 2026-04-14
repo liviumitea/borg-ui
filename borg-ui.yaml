@@ -102,9 +102,9 @@ spec:
             - name: ENVIRONMENT
               value: "production"
             - name: PUID
-              value: "65534"
+              value: "1001"
             - name: PGID
-              value: "65534"
+              value: "1001"
             - name: TZ
               value: "Europe/Bucharest"
             - name: LOCAL_MOUNT_POINTS
