@@ -6,7 +6,7 @@ metadata:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: borg-ui-data
+  name: borg-data
   namespace: borg-ui
 spec:
   accessModes:
@@ -54,14 +54,12 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 3
           readinessProbe:
             exec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 3
           volumeMounts:
             - name: redis-data
               mountPath: /data
@@ -98,6 +96,26 @@ spec:
       labels:
         app: borg-web-ui
     spec:
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: "OnRootMismatch"
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data
+              chown -R 1001:1001 /data
+              chmod -R ug+rwX /data
+              ls -ld /data
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: borg-data
+              mountPath: /data
       containers:
         - name: borg-web-ui
           image: ainullcode/borg-ui:latest
@@ -145,7 +163,6 @@ spec:
             initialDelaySeconds: 40
             periodSeconds: 30
             timeoutSeconds: 10
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /
@@ -153,7 +170,6 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 15
             timeoutSeconds: 10
-            failureThreshold: 3
           volumeMounts:
             - name: borg-data
               mountPath: /data
@@ -167,7 +183,7 @@ spec:
       volumes:
         - name: borg-data
           persistentVolumeClaim:
-            claimName: borg-ui-data
+            claimName: borg-data
         - name: borg-cache
           emptyDir: {}
         - name: host-localtime
