@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: borg-ui
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: borg-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - --maxmemory
+            - 2gb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          ports:
+            - containerPort: 6379
+              name: redis
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          hostPath:
+            path: /data-nfs/data/borg/redis
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: borg-ui
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: borg-web-ui
+  namespace: borg-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: borg-web-ui
+  template:
+    metadata:
+      labels:
+        app: borg-web-ui
+    spec:
+      containers:
+        - name: borg-web-ui
+          image: ainullcode/borg-ui
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          ports:
+            - containerPort: 8081
+              name: http
+          env:
+            - name: PORT
+              value: "8081"
+            - name: ENVIRONMENT
+              value: "production"
+            - name: PUID
+              value: "1001"
+            - name: PGID
+              value: "1001"
+            - name: TZ
+              value: "Europe/Bucharest"
+            - name: LOCAL_MOUNT_POINTS
+              value: "/local"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_DB
+              value: "0"
+            - name: CACHE_TTL_SECONDS
+              value: "7200"
+            - name: CACHE_MAX_SIZE_MB
+              value: "2048"
+            - name: ACTIVATION_SERVICE_URL
+              value: "https://license.borgui.com"
+            - name: ACTIVATION_TIMEOUT_SECONDS
+              value: "10"
+            - name: ENABLE_STARTUP_LICENSE_SYNC
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: borg-data
+              mountPath: /data
+            - name: borg-cache
+              mountPath: /home/borg/.cache/borg
+            - name: host-localtime
+              mountPath: /etc/localtime
+              readOnly: true
+            - name: host-root
+              mountPath: /local
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: borg-data
+          hostPath:
+            path: /data-nfs/data/borg/app-data
+            type: DirectoryOrCreate
+        - name: borg-cache
+          hostPath:
+            path: /data-nfs/data/borg/cache
+            type: DirectoryOrCreate
+        - name: host-localtime
+          hostPath:
+            path: /etc/localtime
+            type: File
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: borg-web-ui
+  namespace: borg-ui
+spec:
+  selector:
+    app: borg-web-ui
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+  type: LoadBalancer
+  loadBalancerIP: 172.16.23.40
