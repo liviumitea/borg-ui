@@ -85,16 +85,14 @@ spec:
       labels:
         app: borg-web-ui
     spec:
-      securityContext:
-        fsGroup: 65534
       containers:
         - name: borg-web-ui
           image: ainullcode/borg-ui:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
-            runAsUser: 65534
-            runAsGroup: 65534
+            runAsUser: 0
+            runAsGroup: 0
           ports:
             - containerPort: 8081
               name: http
